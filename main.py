@@ -14,6 +14,7 @@ from typing import Optional
 from models.person import PersonCreate, PersonRead, PersonUpdate
 from models.address import AddressCreate, AddressRead, AddressUpdate
 from models.health import Health
+from models.mcdonalds import McDonaldsCreate, McDonaldsRead, McDonaldsUpdate
 
 port = int(os.environ.get("FASTAPIPORT", 8000))
 
@@ -22,6 +23,7 @@ port = int(os.environ.get("FASTAPIPORT", 8000))
 # -----------------------------------------------------------------------------
 persons: Dict[UUID, PersonRead] = {}
 addresses: Dict[UUID, AddressRead] = {}
+mcdonaldses: Dict[UUID, McDonaldsRead] = {}
 
 app = FastAPI(
     title="Person/Address API",
@@ -173,3 +175,47 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+
+
+# -----------------------------------------------------------------------------
+# McDonald's endpoints
+# -----------------------------------------------------------------------------
+@app.post("/mcdonaldses", response_model=McDonaldsRead, status_code=201)
+def create_mcdonalds(mcdonalds: McDonaldsCreate):
+    # Each mcdonalds gets its own UUID; stored as McDonaldsRead
+    mcdonalds_read = McDonaldsRead(**mcdonalds.model_dump())
+    mcdonaldses[mcdonalds_read.id] = mcdonalds_read
+    return mcdonalds_read
+
+@app.get("/mcdonaldses", response_model=List[McDonaldsRead])
+def list_mcdonaldses(
+    city: Optional[str] = Query(None, description="Filter by city of at least one address"),
+    state: Optional[str] = Query(None, description="Filter by state of at least one address"),
+    country: Optional[str] = Query(None, description="Filter by country of at least one address"),
+):
+    results = list(mcdonaldses.values())
+
+    # nested address filtering
+    if city is not None:
+        results = [p for p in results if p.address.city == city]
+    if state is not None:
+        results = [p for p in results if p.address.state == state]
+    if country is not None:
+        results = [p for p in results if p.address.country == country]
+
+    return results
+
+@app.get("/mcdonaldses/{mcdonalds_id}", response_model=McDonaldsRead)
+def get_mcdonalds(mcdonalds_id: UUID):
+    if mcdonalds_id not in mcdonaldses:
+        raise HTTPException(status_code=404, detail="McDonalds not found")
+    return mcdonaldses[mcdonalds_id]
+
+@app.patch("/mcdonaldses/{mcdonalds_id}", response_model=McDonaldsRead)
+def update_mcdonalds(mcdonalds_id: UUID, update: McDonaldsUpdate):
+    if mcdonalds_id not in mcdonaldses:
+        raise HTTPException(status_code=404, detail="McDonalds not found")
+    stored = mcdonaldses[mcdonalds_id].model_dump()
+    stored.update(update.model_dump(exclude_unset=True))
+    mcdonaldses[mcdonalds_id] = McDonaldsRead(**stored)
+    return mcdonaldses[mcdonalds_id]
